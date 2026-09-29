@@ -35,9 +35,11 @@ APP_URL is the browser-facing origin. Production allows only its exact origin. L
 
 ## Online payments
 
-Online checkout is intentionally disabled in demo mode. In MongoDB mode configure a server-only Stripe restricted API key with the required Checkout permissions using STRIPE_SECRET_KEY, plus STRIPE_WEBHOOK_SECRET. Store deployed keys in your host's secrets vault. No card details pass through this app.
+Online checkout is intentionally disabled in demo mode. In MongoDB mode configure a server-only Stripe restricted API key with the required Checkout permissions using STRIPE_SECRET_KEY, plus STRIPE_WEBHOOK_SECRET. Both are required to enable online purchases. Store deployed keys in your host's secrets vault. No card details pass through this app.
 
-The required webhook endpoint is `/api/webhooks/stripe`. Subscribe to `checkout.session.completed` and `checkout.session.async_payment_succeeded`. Memberships activate only after signature verification and a paid checkout with a matching payment, currency, amount and session ID. Return-page navigation does not activate purchases. Use Stripe test mode to verify payment and webhook delivery before accepting real payments.
+Run `npm run stripe:listen` before starting the API to configure local test webhook forwarding. The signing secret is written directly to ignored `.env`. Keep the listener running and start/restart `npm run dev` in a separate terminal. Use `npm run payments:check` for read-only connectivity diagnostics.
+
+The required webhook endpoint is `/api/webhooks/stripe`. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` and `checkout.session.expired`. A signed webhook or an authenticated server-side Stripe lookup activates paid purchases after matching amount, currency, attempt and session. Browser return parameters never prove payment. Expired and failed attempts support retries, and delayed payments remain processing until confirmed. See [online payment setup and testing](docs/payments.md).
 
 Reference: [Stripe Checkout fulfillment](https://docs.stripe.com/checkout/fulfillment) and [Stripe key management](https://docs.stripe.com/keys).
 

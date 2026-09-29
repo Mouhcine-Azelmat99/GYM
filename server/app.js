@@ -3,10 +3,10 @@ import session from "express-session";
 import MongoStore from "connect-mongo";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
-import Stripe from "stripe";
 import { z } from "zod";
 import { resolve } from "node:path";
 import { allowedOrigins } from "./origins.js";
+import { paymentConfiguration, createStripeClient, createPaymentService } from "./payments.js";
 import {
   id,
   fail,
@@ -46,14 +46,14 @@ const planSchema = z
     "Choose gym access or class credits.",
   );
 const staffRoles = ["owner", "receptionist"];
-export function createApp({ store, demo = true, sessionStore } = {}) {
+export function createApp({ store, demo = true, sessionStore, stripeClient, paymentConfig } = {}) {
   const app = express();
   const appUrl = process.env.APP_URL || "http://127.0.0.1:5173";
   const origins = allowedOrigins(appUrl);
-  const stripe =
-    !demo && process.env.STRIPE_SECRET_KEY
-      ? new Stripe(process.env.STRIPE_SECRET_KEY)
-      : null;
+  const paymentsConfig = paymentConfig || paymentConfiguration(process.env, demo);
+  const stripe = stripeClient || (paymentsConfig.enabled ? createStripeClient() : null);
+  const onlineEnabled = Boolean(stripe && paymentsConfig.enabled);
+  const payments = onlineEnabled ? createPaymentService({ store, stripe, mode: paymentsConfig.mode }) : null;
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -70,7 +70,7 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
     "/api/webhooks/stripe",
     express.raw({ type: "application/json" }),
     async (req, res) => {
-      if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET)
+      if (!payments || !process.env.STRIPE_WEBHOOK_SECRET)
         return res.status(503).json({ message: "Stripe is not configured." });
       let event;
       try {
@@ -82,26 +82,7 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
       } catch {
         return res.status(400).json({ message: "Invalid signature." });
       }
-      if (
-        [
-          "checkout.session.completed",
-          "checkout.session.async_payment_succeeded",
-        ].includes(event.type)
-      ) {
-        const checkout = event.data.object;
-        if (checkout.payment_status === "paid")
-          await store.mutate((s) => {
-            const p = find(s.payments, checkout.metadata?.paymentId);
-            if (
-              p.method !== "online" ||
-              p.amount !== checkout.amount_total ||
-              p.currency.toLowerCase() !== checkout.currency ||
-              p.sessionId !== checkout.id
-            )
-              fail("Payment details do not match.");
-            activate(s, p.id);
-          });
-      }
+      await payments.webhook(event);
       res.json({ received: true });
     },
   );
@@ -116,7 +97,7 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
       store:
         sessionStore ||
         (!demo
-          ? MongoStore.create({ mongoUrl: process.env.MONGODB_URI })
+          ? MongoStore.create(store.client ? { client: store.client } : { mongoUrl: process.env.MONGODB_URI })
           : undefined),
       cookie: {
         httpOnly: true,
@@ -139,7 +120,8 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
     const s = await store.read();
     res.json({
       demo,
-      onlineEnabled: Boolean(stripe),
+      onlineEnabled,
+      payments: paymentsConfig,
       settings: s.settings,
       plans: s.plans,
     });
@@ -274,7 +256,9 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
       ).length,
     }));
     s.memberships = s.memberships.map((m) => ({ ...m, status: statusOf(m) }));
-    res.json({ ...s, user, demo, onlineEnabled: Boolean(stripe) });
+    // Internal checkout parameters and provider identifiers stay server-side.
+    s.payments = s.payments.map(({ checkout, sessionId, paymentIntentId, ...p }) => p);
+    res.json({ ...s, user, demo, onlineEnabled, paymentMode: paymentsConfig.mode, paymentSetupReason: paymentsConfig.reason });
   });
   app.post("/api/members", roles(...staffRoles), async (req, res) => {
     const input = memberSchema.parse(req.body);
@@ -310,11 +294,11 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
         .parse(req.body);
       if (req.user.role === "member" && input.memberId !== req.user.memberId)
         fail("Access denied.", 403);
-      if (input.method === "online" && !stripe)
+      if (input.method === "online" && !onlineEnabled)
         fail(
           demo
             ? "Online checkout is disabled in the demo. Choose cash to explore the purchase flow."
-            : "Online payments are not configured.",
+            : paymentsConfig.reason || "Online payments are not configured.",
           503,
         );
       res
@@ -345,46 +329,23 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
     "/api/payments/:id/checkout",
     roles(...staffRoles, "member"),
     async (req, res) => {
-      if (!stripe) fail("Online payments are not configured.", 503);
+      if (!payments) fail(paymentsConfig.reason || "Online payments are not configured.", 503);
       const s = await store.read();
       const p = find(s.payments, req.params.id);
       if (req.user.role === "member" && p.memberId !== req.user.memberId)
         fail("Access denied.", 403);
-      if (p.method !== "online" || p.status !== "pending")
-        fail("Payment is not eligible for checkout.");
-      if (p.sessionId) {
-        const prior = await stripe.checkout.sessions.retrieve(p.sessionId);
-        if (prior.status === "open") return res.json({ url: prior.url });
-        fail(
-          "This checkout is closed. Contact the gym to arrange a new payment.",
-        );
-      }
-      const checkout = await stripe.checkout.sessions.create(
-        {
-          mode: "payment",
-          customer_email: find(s.members, p.memberId).email,
-          metadata: { paymentId: p.id },
-          line_items: [
-            {
-              price_data: {
-                currency: p.currency.toLowerCase(),
-                unit_amount: p.amount,
-                product_data: { name: p.description },
-              },
-              quantity: 1,
-            },
-          ],
-          success_url: appUrl + "/#payments",
-          cancel_url: appUrl + "/#payments",
-        },
-        { idempotencyKey: p.id },
-      );
-      await store.mutate((s) => {
-        find(s.payments, p.id).sessionId = checkout.id;
-      });
-      res.json({ url: checkout.url });
+      const returnOrigin = origins.has(req.headers.origin) ? req.headers.origin : new URL(appUrl).origin;
+      res.json(await payments.checkout(p.id, returnOrigin));
     },
   );
+  app.post('/api/payments/:id/reconcile', roles(...staffRoles, 'member'), async (req, res) => {
+    if (!payments) fail(paymentsConfig.reason || 'Online payments are not configured.', 503);
+    const p = find((await store.read()).payments, req.params.id);
+    if (req.user.role === 'member' && p.memberId !== req.user.memberId) fail('Access denied.', 403);
+    if (p.method !== 'online') fail('This purchase uses cash payment.');
+    const result = await payments.reconcile(p.id);
+    res.json({ id: p.id, status: result.status });
+  });
   app.post("/api/schedule", roles(...staffRoles), async (req, res) => {
     const input = z
       .object({
@@ -532,7 +493,12 @@ export function createApp({ store, demo = true, sessionStore } = {}) {
       return res
         .status(400)
         .json({ message: err.issues.map((i) => i.message).join(" ") });
-    if (!err.status) console.error(err);
+    if (err.type?.startsWith('Stripe')) {
+      // Provider errors can contain request parameters or personal data.
+      console.error('Stripe request failed', { type: err.type, code: err.code, requestId: err.requestId });
+      return res.status(502).json({ message: 'The payment provider is unavailable. Your purchase is saved; please retry from Payments.' });
+    }
+    if (!err.status) console.error('Request failed', { name: err.name });
     res
       .status(err.status || 500)
       .json({

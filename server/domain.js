@@ -7,7 +7,12 @@ export function hash(password){const salt=randomBytes(16).toString('hex');return
 export function verify(password,encoded){if(!encoded)return false;const [salt,key]=encoded.split(':');return timingSafeEqual(Buffer.from(key,'hex'),scryptSync(password,salt,64));}
 export function purchase(s,memberId,planId,method){
   find(s.members,memberId);const p=find(s.plans,planId);
-  if(s.memberships.some(m=>m.memberId===memberId&&m.planId===planId&&m.status==='pending'))fail('This plan already has a pending payment. Complete it from Payments.');
+  const pending=s.memberships.find(m=>m.memberId===memberId&&m.planId===planId&&m.status==='pending');
+  if(pending){
+    const existing=s.payments.find(p=>p.membershipId===pending.id);
+    if(method==='online'&&existing?.method==='online')return existing;
+    fail('This plan already has a pending payment. Complete it from Payments.');
+  }
   const m={id:id(),memberId,planId,planName:p.name,kind:p.kind,gymAccess:p.gymAccess,classes:p.classes,days:p.days,credits:p.credits,status:'pending',startsAt:null,endsAt:null,createdAt:new Date().toISOString()};
   const payment={id:id(),memberId,membershipId:m.id,description:p.name,amount:p.price,currency:s.settings.currency,method,status:'pending',createdAt:new Date().toISOString(),paidAt:null};
   s.memberships.push(m);s.payments.push(payment);return payment;

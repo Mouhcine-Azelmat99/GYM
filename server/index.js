@@ -14,7 +14,13 @@ if (
   );
 if (demo && process.env.NODE_ENV === "production")
   throw new Error("Demo mode must not run in production.");
-const store = await createStore({ demo });
+let store;
+try {
+  store = await createStore({ demo });
+} catch (error) {
+  console.error(`Database startup failed (${error.name}). Check the MongoDB URI, cluster availability and Atlas Network Access for this machine. Credentials are not logged.`);
+  process.exit(1);
+}
 await bootstrapOwner(store, { demo });
 const app = createApp({ store, demo });
 if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);

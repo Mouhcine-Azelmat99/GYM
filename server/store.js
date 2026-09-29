@@ -29,5 +29,5 @@ export async function createStore({demo=true,file='data/demo.json',memory=false}
     };
     const promise=queue.then(work);queue=promise.catch(()=>{});return promise;
   };
-  return {read,mutate};
+  return {read,mutate,client:demo?undefined:mongoose.connection.getClient()};
 }
