@@ -1,3 +1,4 @@
+import {memberCheckIn,scanCheckIn} from './qr-checkin.js';
 import {auditContext} from './audit.js';
 import {issueInvitation,acceptInvitation} from './invitations.js';
 import {report} from './reports.js';
@@ -233,6 +234,13 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
         fail("You do not have access to this action.", 403);
       next();
     };
+  app.get('/api/attendance/qr',roles('member'),async(req,res)=>{
+    res.set('Cache-Control','no-store');res.json(memberCheckIn(await store.read(),req.user.memberId,invitationSecret));
+  });
+  app.post('/api/attendance/scan',roles(...staffRoles),async(req,res)=>{
+    const {token}=z.object({token:z.string().min(1).max(1024)}).parse(req.body);
+    res.json(await store.mutate(s=>scanCheckIn(s,token,invitationSecret,req.user.id)));
+  });
   app.get('/api/reports',roles('owner'),async(req,res)=>res.json(report(await store.read(),String(req.query.from||''),String(req.query.to||''))));
   app.get('/api/audit',roles('owner'),async(req,res)=>{
     const {page,search}=z.object({page:z.coerce.number().int().min(1).max(10000).default(1),search:z.string().max(120).default('')}).parse(req.query);

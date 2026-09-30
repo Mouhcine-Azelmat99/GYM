@@ -57,3 +57,13 @@ test('untrusted origins are rejected before authentication',async()=>{
   await request(app).post('/api/auth/login').set('Origin','https://evil.example').send({email:'a@example.com',password:'test'}).expect(403);
   await request(app).post('/api/auth/demo').set('Origin','http://127.0.0.1:5173').send({role:'owner'}).expect(200);
 });
+
+
+test('explicit development tunnel permits only its origin and is ignored in production',()=>{
+ const tunnel='https://5992-105-157-159-144.ngrok-free.app';
+ const origins=allowedOrigins('http://127.0.0.1:5173',false,tunnel);
+ assert.ok(origins.has(tunnel));assert.ok(origins.has('http://localhost:5173'));
+ assert.ok(!origins.has('https://other.ngrok-free.app'));
+ assert.ok(!allowedOrigins('https://gym.example',true,tunnel).has(tunnel));
+ assert.throws(()=>allowedOrigins('http://localhost:5173',false,'http://tunnel.example'),/HTTPS/);
+});

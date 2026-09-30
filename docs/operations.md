@@ -24,3 +24,14 @@ Tokens are derived with HMAC from a random invitation ID and the session secret.
 **Audit log** is owner-only, searchable, and paginated in groups of 50. It records successful changes to members, user accounts, memberships, payments, bookings, attendance, plans, sessions, invitations, and settings. Each event includes the actor, timestamp, entity/record ID, action, and changed field names. It never stores field values, photo bytes, passwords, invitation tokens, or provider payloads. Public registration/acceptance is attributed to Public visitor, signed webhooks to Stripe, background work to System.
 
 Audit entries are saved atomically with their corresponding changes. Failed writes and no-op updates create no entries. The newest 5,000 events are retained; tracking starts on installation. There is no edit/delete API for events, but this is an operational history rather than a tamper-proof or legally compliant archive. Existing single-document storage limits still apply. High-volume production deployments need a separate append-only collection and an explicit archival policy.
+
+
+## QR check-in
+
+Members select **Check in** on their overview to open **My QR code**. The modal shows the current server-synchronized time in the gym timezone and the number of recorded gym visits in the current calendar month. Class attendance is not included in this count. It refreshes attendance and the QR every 15 seconds while open. Members already checked in today see confirmation instead of another QR; members without current gym access see the eligibility message.
+
+Owners and receptionists select **Attendance ? Scan QR code**. The camera opens automatically; allow the browser camera permission when prompted. A recognized code immediately validates access and records the visit. Camera access requires HTTPS in deployment (localhost also works) and the browser's permission. The camera stops on a scan, on closing the modal, or when the tab becomes hidden. Camera frames are decoded locally and are not uploaded to the server. The scanner has no image upload, pasted-code input, or manual submit button.
+
+QR tokens are signed with a check-in-specific HMAC using `SESSION_SECRET`, expire after 90 seconds, and contain a member ID and timestamps, not contact details. The scan endpoint requires an owner/receptionist session and rechecks membership validity at scan time. Concurrent/repeated scans cannot create duplicate attendance on the same gym-local date. Scan events include the staff actor in the audit log. Keep manual check-in available for camera or connectivity problems. A short-lived QR is not proof of identity: reception should still confirm the person presenting it.
+
+Members can open **Attendance** to view only their own gym visits, filter by month, and see their current-month total in the gym timezone. The page also links to **My QR code**. Staff retain the separate manual check-in action.
