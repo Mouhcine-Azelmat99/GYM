@@ -1,3 +1,4 @@
+import {validReset} from './password-reset.js';
 import { randomUUID } from 'node:crypto';
 
 export const defaultPreferences = { bookingEmails: true, expiryEmails: true };
@@ -95,6 +96,7 @@ export function createExpiryReminders(state, now = new Date()) {
 }
 
 export function shouldEmail(state, notification, now = new Date()) {
+  if(notification.type==='password-reset')return validReset(state,notification,now);
   const member = state.members.find(m => m.id === notification.memberId);
   if (!member?.email) return false;
   const preferences = { ...defaultPreferences, ...member.notificationPreferences };
@@ -125,7 +127,7 @@ export function pruneNotifications(state, now = new Date()) {
 }
 
 export function notificationsFor(state, user) {
-  const rows = (state.notifications || []).filter(n => user.role === 'owner' || user.role === 'receptionist' || (user.role === 'member' && n.memberId === user.memberId));
+  const rows = (state.notifications || []).filter(n=>n.type!=='password-reset').filter(n => user.role === 'owner' || user.role === 'receptionist' || (user.role === 'member' && n.memberId === user.memberId));
   return rows.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 200).map(({ key, email, ...n }) => ({
     ...n, emailStatus: email.status,
     ...(user.role === 'owner' || user.role === 'receptionist' ? { emailAttempts: email.attempts, emailError: email.errorCode, recipientName: state.members.find(m => m.id === n.memberId)?.name } : {}),

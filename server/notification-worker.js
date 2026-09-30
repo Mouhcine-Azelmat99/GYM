@@ -29,7 +29,8 @@ export function createNotificationWorker({ store, sender, clock = () => new Date
         if (n.email.attempts >= 5) { n.email.status = 'failed';return { skipped: true }; }
         n.email.status = 'sending';n.email.token = token;n.email.attempts++;
         n.email.leaseUntil = new Date(now.getTime() + 300000).toISOString();
-        return { notification: structuredClone(n), member: structuredClone(state.members.find(m => m.id === n.memberId)), settings: structuredClone(state.settings) };
+        const recipient=n.type==='password-reset'?state.users.find(u=>u.id===n.accountUserId):state.members.find(m=>m.id===n.memberId);
+        return { notification: structuredClone(n), member: {name:recipient.name,email:recipient.email}, settings: structuredClone(state.settings) };
       });
       if (!claimed) break;
       if (claimed.skipped) continue;

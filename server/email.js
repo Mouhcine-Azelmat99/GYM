@@ -1,3 +1,4 @@
+import {resetToken} from './password-reset.js';
 import {invitationToken} from './invitations.js';
 import nodemailer from "nodemailer";
 import { z } from "zod";
@@ -43,10 +44,15 @@ export function emailContent({ notification, member, settings, appUrl, invitatio
     if(!invitationSecret)throw new Error('Invitation signing secret is required');
     url.search='';url.hash='invite='+invitationToken(notification.referenceId,invitationSecret);label='Set your password';
   }
+  if(notification.type==='password-reset'){
+    if(!invitationSecret)throw new Error('Reset signing secret is required');
+    url.search='';url.hash='reset='+resetToken(notification.referenceId,invitationSecret);label='Reset password';
+  }
+  const footer=notification.type==='password-reset'?'Never share this reset link.':'Manage your email preferences on your profile page.';
   return {
     subject: notification.title,
-    text: `${settings.name}\n\nHi ${name},\n\n${notification.body}\n\n${label}: ${url.href}\n\nManage your email preferences on your profile page.`,
-    html: `<div style="font-family:Arial,sans-serif;background:#f8fafc;padding:32px;color:#18181b"><div style="max-width:560px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:32px"><p style="font-weight:700;letter-spacing:1px">${escape(settings.name)}</p><h1 style="font-size:23px;line-height:1.3">${escape(notification.title)}</h1><p>Hi ${escape(name)},</p><p style="line-height:1.7;color:#475569">${escape(notification.body)}</p><p style="margin:28px 0"><a style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;border-radius:6px;padding:12px 18px" href="${escape(url.href)}">${label}</a></p><p style="font-size:12px;color:#64748b">Manage your email preferences on your profile page.</p></div></div>`,
+    text: `${settings.name}\n\nHi ${name},\n\n${notification.body}\n\n${label}: ${url.href}\n\n${footer}`,
+    html: `<div style="font-family:Arial,sans-serif;background:#f8fafc;padding:32px;color:#18181b"><div style="max-width:560px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:32px"><p style="font-weight:700;letter-spacing:1px">${escape(settings.name)}</p><h1 style="font-size:23px;line-height:1.3">${escape(notification.title)}</h1><p>Hi ${escape(name)},</p><p style="line-height:1.7;color:#475569">${escape(notification.body)}</p><p style="margin:28px 0"><a style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;border-radius:6px;padding:12px 18px" href="${escape(url.href)}">${label}</a></p><p style="font-size:12px;color:#64748b">${footer}</p></div></div>`,
   };
 }
 

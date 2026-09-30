@@ -54,7 +54,7 @@ Tests exercise allowed origins, authentication/session persistence, role boundar
 
 ## Current release boundaries
 
-This is a functional starting release, not the entire product roadmap. Membership freezes/cancellation workflows, refunds, password recovery, email verification, translations, tax invoices, advanced forecasting and a full public marketing website remain to be built. Prices use integer minor units and currently support USD, EUR, GBP, MAD, CAD and AUD. Currency is locked after payment records exist. Only one gym timezone and currency are configured at a time. Training session eligibility currently uses generic class credits.
+This is a functional starting release, not the entire product roadmap. Membership freezes/cancellation workflows, refunds, email verification, translations, tax invoices, advanced forecasting and a full public marketing website remain to be built. Prices use integer minor units and currently support USD, EUR, GBP, MAD, CAD and AUD. Currency is locked after payment records exist. Only one gym timezone and currency are configured at a time. Training session eligibility currently uses generic class credits.
 
 The initial MongoDB adapter stores the gym as one atomic aggregate with optimistic concurrency, suitable only for a small evaluation dataset. Split growing histories into indexed collections and paginate the state API before operational use; the MongoDB document limit makes unlimited history unsuitable for this adapter. The project owner has reported a successful online payment test; see [payment verification](docs/payments.md#verification) for the distinction between manual and automated coverage.
 

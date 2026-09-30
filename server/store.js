@@ -7,7 +7,7 @@ import {seed} from './seed.js';
 // A single gym aggregate makes capacity, credits and payment activation atomic.
 // Optimistic concurrency retries prevent lost updates across server processes.
 const record = new mongoose.Schema({id:{type:String,required:true}}, {_id:false,strict:false});
-const schema = new mongoose.Schema({_id:String,settings:{type:mongoose.Schema.Types.Mixed,required:true},...Object.fromEntries(['plans','members','memberships','payments','schedule','bookings','attendance','users','notifications','invitations','auditLogs'].map(k=>[k,[record]]))},{optimisticConcurrency:true});
+const schema = new mongoose.Schema({_id:String,settings:{type:mongoose.Schema.Types.Mixed,required:true},...Object.fromEntries(['plans','members','memberships','payments','schedule','bookings','attendance','users','notifications','invitations','auditLogs','passwordResets'].map(k=>[k,[record]]))},{optimisticConcurrency:true});
 const Workspace=mongoose.model('Workspace',schema);
 export async function createStore({demo=true,file='data/demo.json',memory=false}={}) {
   let state;

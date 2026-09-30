@@ -1,3 +1,4 @@
+import {requestPasswordReset,finishPasswordReset} from './password-reset.js';
 import {memberCheckIn,scanCheckIn} from './qr-checkin.js';
 import {auditContext} from './audit.js';
 import {issueInvitation,acceptInvitation} from './invitations.js';
@@ -53,13 +54,13 @@ const planSchema = z
     "Choose gym access or class credits.",
   );
 const staffRoles = ["owner", "receptionist"];
-export function createApp({ store, demo = true, sessionStore, stripeClient, paymentConfig } = {}) {
+export function createApp({ store, demo = true, sessionStore, stripeClient, paymentConfig, emailConfig: emailOverride } = {}) {
   const app = express();
   const invitationSecret=process.env.SESSION_SECRET || "local-demo-only-not-for-production";
   app.use((req,res,next)=>auditContext.run({actor:()=>req.user||{id:"public",name:req.path==="/api/webhooks/stripe"?"Stripe":"Public visitor",role:req.path==="/api/webhooks/stripe"?"system":"guest"}},next));
   const appUrl = process.env.APP_URL || "http://127.0.0.1:5173";
   const origins = allowedOrigins(appUrl);
-  const emailConfig = emailConfiguration(process.env, demo);
+  const emailConfig = emailOverride || emailConfiguration(process.env, demo);
   const paymentsConfig = paymentConfig || paymentConfiguration(process.env, demo);
   const stripe = stripeClient || (paymentsConfig.enabled ? createStripeClient() : null);
   const onlineEnabled = Boolean(stripe && paymentsConfig.enabled);
@@ -148,9 +149,22 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
       req.session.regenerate((e) => {
         if (e) return reject(e);
         req.session.userId = user.id;
+        req.session.authVersion = user.sessionVersion || 0;
         req.session.save((e) => (e ? reject(e) : resolve()));
       }),
     );
+  const resetLimit=rateLimit({windowMs:900000,limit:10,standardHeaders:'draft-8',legacyHeaders:false});
+  app.post('/api/auth/forgot-password',resetLimit,async(req,res)=>{
+    const {email}=z.object({email:z.string().trim().email().max(254).transform(v=>v.toLowerCase())}).parse(req.body);
+    if(emailConfig.enabled)await store.mutate(s=>requestPasswordReset(s,email,invitationSecret));
+    res.json({message:'If an account matches this email, a password reset link will be sent shortly.'});
+  });
+  app.post('/api/auth/reset-password',authLimit,async(req,res)=>{
+    const {token,password}=z.object({token:z.string().regex(/^[a-f0-9]{64}$/),password:z.string().min(10).max(128)}).parse(req.body);
+    await store.mutate(s=>finishPasswordReset(s,token,password));
+    await new Promise((resolve,reject)=>req.session.destroy(e=>e?reject(e):resolve()));
+    res.clearCookie('forma.sid');res.json({ok:true});
+  });
   app.post("/api/auth/demo", authLimit, async (req, res) => {
     if (!demo) fail("Demo login is disabled.", 404);
     const role = z
@@ -224,7 +238,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
   app.use("/api", async (req, res, next) => {
     const s = await store.read();
     req.user = s.users.find((u) => u.id === req.session.userId);
-    if (!req.user) fail("Please sign in to continue.", 401);
+    if (!req.user || (req.session.authVersion||0)!==(req.user.sessionVersion||0)) fail("Please sign in to continue.", 401);
     next();
   });
   const roles =
@@ -268,7 +282,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
     delete s._id;
     delete s.__v;
     const invitationRows=s.invitations||[];
-    delete s.invitations;delete s.auditLogs;
+    delete s.invitations;delete s.auditLogs;delete s.passwordResets;
     if(staffRoles.includes(req.user.role))s.members=s.members.map(m=>{
       const invitation=invitationRows.find(i=>i.memberId===m.id);
       const notification=(s.notifications||[]).find(n=>n.type==='member-invitation'&&n.referenceId===invitation?.id);

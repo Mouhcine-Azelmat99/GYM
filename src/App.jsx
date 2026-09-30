@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Dialogs from './components/Dialogs';
 const module=()=>import('./pages/Management');
 const pages=Object.fromEntries(['Members','Memberships','Schedule','Attendance','Team','Settings','MemberHome'].map(key=>[key,lazy(()=>module().then(m=>({default:m[key]})))]));
+const PasswordReset=lazy(()=>import('./pages/PasswordReset'));
 const MemberQr=lazy(()=>import('./components/MemberQr'));
 const QrScanner=lazy(()=>import('./components/QrScanner'));
 const AcceptInvitation=lazy(()=>import('./pages/AcceptInvitation'));
@@ -34,6 +35,7 @@ export default function App(){
   async function switchRole(){try{await api('/auth/demo',{role:state.user.role==='member'?'owner':'member'});await refresh();navigate('overview');}catch(e){setToast({message:e.message,error:true});}}
   if(loading)return <div className="loading-screen"><strong>FORMA.</strong><span>Opening your workspace…</span></div>;
   if(fatal)return <div className="loading-screen"><h1>Couldn’t connect to Forma.</h1><p>{fatal}</p><button className="button primary" onClick={initialize}>Try again</button></div>;
+  if(page==='forgot-password'||page.startsWith('reset='))return <Suspense fallback={<div className="empty">Loading password reset...</div>}><PasswordReset key={page} token={page.startsWith('reset=')?page.slice(6):null} onReset={()=>{setState(null);history.replaceState(null,'',location.pathname+location.search+'#reset-complete');}}/></Suspense>;
   if(page.startsWith('invite='))return <Suspense fallback={<div className="empty">Opening invitation?</div>}><AcceptInvitation token={page.slice(7)} onAccepted={async()=>{history.replaceState(null,'',location.pathname+location.search+'#profile');setPage('profile');await refresh();}}/></Suspense>;
   if(!state)return <Login config={config} onLogin={async()=>{await refresh();navigate(new URLSearchParams(location.search).has('checkout')?'payments':'overview');}}/>;
   const allowed=state.user.role==='member'?['overview','memberships','schedule','attendance','payments','notifications','profile']:state.user.role==='trainer'?['overview','schedule']:state.user.role==='receptionist'?['overview','members','memberships','schedule','attendance','payments','notifications','invitations']:['overview','members','memberships','schedule','attendance','payments','notifications','invitations','reports','audit','team','settings'];

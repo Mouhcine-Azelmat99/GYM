@@ -1,0 +1,31 @@
+- generic [ref=f3e3]:
+  - generic [ref=f3e4]:
+    - generic [ref=f3e5]: FORMA.
+    - generic [ref=f3e13]:
+      - heading "More movement. Less management." [level=1] [ref=f3e15]: More movement.Less management.
+      - paragraph [ref=f3e16]: Your members, your sessions, your gym.One space to bring it all together.
+  - generic [ref=f3e17]:
+    - generic [ref=f3e18]:
+      - generic [ref=f3e19]: WELCOME TO Forma Training Club
+      - heading "Good to have you back." [level=2] [ref=f3e20]
+      - paragraph [ref=f3e21]: Sign in to your workspace or member portal.
+      - generic [ref=f3e22]:
+        - generic [ref=f3e23]:
+          - generic [ref=f3e24]: Email address
+          - textbox "Email address" [ref=f3e25]
+        - generic [ref=f3e26]:
+          - generic [ref=f3e27]: Password
+          - textbox "Password" [ref=f3e28]
+        - button "Sign in" [ref=f3e29] [cursor=pointer]
+      - link "Forgot password?" [ref=f3e32] [cursor=pointer]:
+        - /url: "#forgot-password"
+      - button "New here? Create a member account" [ref=f3e33] [cursor=pointer]
+      - generic [ref=f3e34]:
+        - strong [ref=f3e35]: Explore the demo
+        - paragraph [ref=f3e36]: Sample accounts. No password needed.
+        - generic [ref=f3e37]:
+          - button "owner" [ref=f3e38] [cursor=pointer]
+          - button "receptionist" [ref=f3e39] [cursor=pointer]
+          - button "trainer" [ref=f3e40] [cursor=pointer]
+          - button "member" [ref=f3e41] [cursor=pointer]
+    - generic [ref=f3e42]: Your gym. A little more connected.

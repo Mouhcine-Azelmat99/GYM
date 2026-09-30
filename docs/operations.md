@@ -35,3 +35,14 @@ Owners and receptionists select **Attendance ? Scan QR code**. The camera opens 
 QR tokens are signed with a check-in-specific HMAC using `SESSION_SECRET`, expire after 90 seconds, and contain a member ID and timestamps, not contact details. The scan endpoint requires an owner/receptionist session and rechecks membership validity at scan time. Concurrent/repeated scans cannot create duplicate attendance on the same gym-local date. Scan events include the staff actor in the audit log. Keep manual check-in available for camera or connectivity problems. A short-lived QR is not proof of identity: reception should still confirm the person presenting it.
 
 Members can open **Attendance** to view only their own gym visits, filter by month, and see their current-month total in the gym timezone. The page also links to **My QR code**. Staff retain the separate manual check-in action.
+
+
+## Reset a password
+
+Select **Forgot password?** on the sign-in page. Existing password-based member and staff accounts receive a Brevo reset email when delivery is enabled. The response is identical for unknown accounts and when delivery is unavailable. No reset tokens or links are exposed through workspace state or public responses. Demo mode does not send reset email.
+
+Links expire after 30 minutes, work once, and use the configured `APP_URL` (set this to your public HTTPS URL for mobile/email access). A new request after the one-minute cooldown invalidates earlier links. Successful reset requires at least 10 characters, invalidates all existing sessions, and returns the user to sign-in rather than automatically authenticating them. Changing an account email also invalidates pending reset requests. Tokens use a separate HMAC purpose from invitations and are stored only as SHA-256 digests. The signing key is `SESSION_SECRET`; keep it stable and private.
+
+Reset requests are rate-limited and enter the durable email queue. They are excluded from notification inboxes and notification activity. Only the successful password change appears in the audit log; password values and reset tokens never do. This does not add email verification.
+
+The member overview shows monthly gym attendance in the gym timezone. Owner/reception overview **Check in** opens the camera scanner. On phones, the menu button opens a side drawer; selecting a page closes it.
