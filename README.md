@@ -61,3 +61,5 @@ The initial MongoDB adapter stores the gym as one atomic aggregate with optimist
 ## Notifications
 
 Booking confirmations, cancellations, and membership expiry reminders now appear in the member inbox, with Brevo SMTP delivery, email preferences, and staff delivery activity. See [Brevo setup and scheduling](docs/notifications.md). Run `npm run email:check` after configuring SMTP credentials to verify authentication without sending email.
+
+Members can edit their name and phone in **My profile**. Changing the login email requires the current password and an unused address. Profile photos support still JPEG, PNG, and WebP up to 2 MB and 16 megapixels. The server removes metadata and saves a 256-pixel square JPEG capped at 64 KB. Photos are stored with the member in the existing gym aggregate, so its documented document-size limitation still applies; larger deployments should move images to object storage. Photo and details saves are separate operations; the UI reports partial failures.

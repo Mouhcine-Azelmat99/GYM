@@ -1,3 +1,4 @@
+import {updateProfile,normalizePhoto} from './profile.js';
 import express from "express";
 import session from "express-session";
 import MongoStore from "connect-mongo";
@@ -89,6 +90,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
       res.json({ received: true });
     },
   );
+  app.use("/api/profile/photo", express.json({ limit: "3mb" }));
   app.use(express.json({ limit: "32kb" }));
   app.use(
     session({
@@ -221,6 +223,14 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
         fail("You do not have access to this action.", 403);
       next();
     };
+  app.patch('/api/profile', roles('member'), authLimit, async (req,res)=>{
+    res.json(await store.mutate(s=>updateProfile(s,req.user.id,req.body)));
+  });
+  app.put('/api/profile/photo', roles('member'), async (req,res)=>{
+    const photo=await normalizePhoto(req.body.photo);
+    await store.mutate(s=>{find(s.members,req.user.memberId).photo=photo;});
+    res.json({ok:true});
+  });
   app.get("/api/state", async (req, res) => {
     const s = await store.read();
     delete s._id;
@@ -534,6 +544,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
   app.use(express.static(resolve("dist")));
   app.get("/{*path}", (req, res) => res.sendFile(resolve("dist/index.html")));
   app.use((err, req, res, next) => {
+    if (err.type === 'entity.too.large') return res.status(413).json({message:'The upload is too large. Choose a photo up to 2 MB.'});
     if (err instanceof z.ZodError)
       return res
         .status(400)

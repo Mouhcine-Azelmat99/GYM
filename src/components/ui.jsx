@@ -3,7 +3,7 @@ import {X,ArrowUpRight,Search} from 'lucide-react';
 import {initials} from '../api';
 export function Button({children,variant='',className='',...props}){return <button className={`button ${variant} ${className}`} {...props}>{children}</button>;}
 export function Status({value}){return <span className={`status ${['failed','expired','no-show','cancelled'].includes(value)?'danger':['pending','processing'].includes(value)?'pending':''}`}><span/>{value}</span>;}
-export function Avatar({name}){return <span className="avatar" aria-hidden="true">{initials(name||'?')}</span>;}
+export function Avatar({name,photo}){return <span className="avatar" aria-hidden="true">{photo?<img src={photo} alt=""/>:initials(name||'?')}</span>;}
 export function Empty({children='Nothing here yet.'}){return <div className="empty">{children}</div>;}
 export function Panel({title,action,children,className=''}){return <section className={`panel ${className}`}>{title&&<div className="panel-heading"><h2>{title}</h2>{action}</div>}{children}</section>;}
 export function Field({label,children}){return <label className="field"><span>{label}</span>{children}</label>;}
