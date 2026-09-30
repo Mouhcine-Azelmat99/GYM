@@ -8,6 +8,7 @@
     "build": "vite build",
     "start": "node server/index.js",
     "test": "node --test tests/*.test.js",
+    "email:check": "node scripts/check-email.mjs",
     "payments:check": "node scripts/check-payments.mjs",
     "stripe:listen": "node scripts/stripe-listen.mjs"
   },
@@ -22,6 +23,7 @@
     "helmet": "^8.1.0",
     "lucide-react": "^0.468.0",
     "mongoose": "^8.19.0",
+    "nodemailer": "^10.0.12",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "stripe": "^22.6.2",

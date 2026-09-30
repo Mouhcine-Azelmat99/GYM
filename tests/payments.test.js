@@ -125,6 +125,7 @@ test('signed successful checkout activates once, including duplicate event deliv
   assert.equal((await f.event('checkout.session.completed', session)).status, 200);
   assert.equal((await f.current()).paidAt, before.paidAt);
   assert.equal((await f.store.read()).memberships.find(m => m.id === before.membershipId).endsAt, expiry);
+  assert.deepEqual((await f.store.read()).notifications.map(n=>n.type), ['payment-completed','membership-confirmed']);
 });
 
 test('unsigned or tampered webhooks cannot change payment state', async () => {

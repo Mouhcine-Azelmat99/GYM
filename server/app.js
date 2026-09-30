@@ -7,6 +7,8 @@ import { z } from "zod";
 import { resolve } from "node:path";
 import { allowedOrigins } from "./origins.js";
 import { paymentConfiguration, createStripeClient, createPaymentService } from "./payments.js";
+import { notificationsFor, notifyMemberCreated, defaultPreferences, createExpiryReminders, shouldEmail } from "./notifications.js";
+import { emailConfiguration } from "./email.js";
 import {
   id,
   fail,
@@ -50,6 +52,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
   const app = express();
   const appUrl = process.env.APP_URL || "http://127.0.0.1:5173";
   const origins = allowedOrigins(appUrl);
+  const emailConfig = emailConfiguration(process.env, demo);
   const paymentsConfig = paymentConfig || paymentConfiguration(process.env, demo);
   const stripe = stripeClient || (paymentsConfig.enabled ? createStripeClient() : null);
   const onlineEnabled = Boolean(stripe && paymentsConfig.enabled);
@@ -193,6 +196,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
         role: "member",
       };
       s.users.push(user);
+      notifyMemberCreated(s, member);
       return user;
     });
     await loginSession(req, user);
@@ -223,6 +227,9 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
     delete s.__v;
     const user = { ...req.user };
     delete user.passwordHash;
+    s.notifications = notificationsFor(s, user);
+    s.notificationPreferences = { ...defaultPreferences, ...s.members.find(m => m.id === user.memberId)?.notificationPreferences };
+    s.notificationEmail = { enabled: emailConfig.enabled, provider: emailConfig.provider, reason: emailConfig.reason };
     s.users = s.users
       .filter((u) => u.role !== "member")
       .map(({ passwordHash, ...u }) => u);
@@ -260,6 +267,43 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
     s.payments = s.payments.map(({ checkout, sessionId, paymentIntentId, ...p }) => p);
     res.json({ ...s, user, demo, onlineEnabled, paymentMode: paymentsConfig.mode, paymentSetupReason: paymentsConfig.reason });
   });
+  app.get('/api/notifications', roles(...staffRoles, 'member'), async (req, res) => {
+    const s = await store.read();
+    const notifications = notificationsFor(s, req.user);
+    res.json({ notifications,
+      preferences: { ...defaultPreferences, ...s.members.find(m => m.id === req.user.memberId)?.notificationPreferences },
+      email: { enabled: emailConfig.enabled, provider: emailConfig.provider, reason: emailConfig.reason },
+    });
+  });
+  app.post('/api/notifications/read-all', roles('member'), async (req, res) => {
+    await store.mutate(s => { for (const n of s.notifications || []) if (n.memberId === req.user.memberId && !n.readAt) n.readAt = new Date().toISOString(); });
+    res.json({ ok: true });
+  });
+  app.post('/api/notifications/:id/read', roles('member'), async (req, res) => {
+    await store.mutate(s => {
+      const n = (s.notifications || []).find(n => n.id === req.params.id && n.memberId === req.user.memberId);
+      if (!n) fail('Notification not found.', 404);
+      n.readAt ??= new Date().toISOString();
+    });res.json({ ok: true });
+  });
+  app.patch('/api/notifications/preferences', roles('member'), async (req, res) => {
+    const input = z.object({ bookingEmails: z.boolean(), expiryEmails: z.boolean() }).parse(req.body);
+    await store.mutate(s => { find(s.members, req.user.memberId).notificationPreferences = input; });
+    res.json(input);
+  });
+  app.post('/api/notifications/reminders', roles('owner'), async (req, res) => {
+    const created = await store.mutate(s => createExpiryReminders(s));
+    res.json({ created });
+  });
+  app.post('/api/notifications/:id/retry', roles('owner'), async (req, res) => {
+    if (!emailConfig.enabled) fail(emailConfig.reason, 503);
+    await store.mutate(s => {
+      const n = find(s.notifications || [], req.params.id);
+      if (!['failed', 'not-configured'].includes(n.email.status)) fail('This email cannot be retried.');
+      if (!shouldEmail(s, n)) fail('This notification is no longer relevant or the member has opted out.');
+      n.email = { status: 'queued', attempts: 0, nextAttemptAt: new Date().toISOString() };
+    });res.json({ ok: true });
+  });
   app.post("/api/members", roles(...staffRoles), async (req, res) => {
     const input = memberSchema.parse(req.body);
     const result = await store.mutate((s) => {
@@ -267,6 +311,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
         fail("A member with this email already exists.");
       const m = { ...input, id: id(), joinedAt: new Date().toISOString() };
       s.members.unshift(m);
+      notifyMemberCreated(s, m, false);
       return m;
     });
     res.status(201).json(result);

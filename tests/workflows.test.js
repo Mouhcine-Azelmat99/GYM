@@ -28,6 +28,7 @@ test('concurrent reservations cannot exceed capacity or spend credits twice',asy
   const results=await Promise.allSettled([store.mutate(s=>book(s,'member-1','class-1')),store.mutate(s=>book(s,'member-7','class-1'))]);
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
   const s=await store.read();assert.equal(s.bookings.length,1);assert.equal(s.memberships[0].credits+s.memberships[6].credits,23);
+  assert.equal(s.notifications.length,1);assert.equal(s.notifications[0].referenceId,s.bookings[0].id);
 });
 test('early cancellation returns one credit, repeated cancellation fails',async()=>{
   const store=await createStore({memory:true});await store.mutate(s=>{s.schedule[0].startsAt=new Date(Date.now()+86400000).toISOString();});

@@ -2,6 +2,8 @@ import "dotenv/config";
 import { createStore } from "./store.js";
 import { createApp } from "./app.js";
 import { bootstrapOwner } from "./bootstrap-owner.js";
+import { createEmailSender } from "./email.js";
+import { startNotificationWorker } from "./notification-worker.js";
 const demo = process.env.DEMO_MODE !== "false";
 if (
   !demo &&
@@ -22,6 +24,7 @@ try {
   process.exit(1);
 }
 await bootstrapOwner(store, { demo });
+startNotificationWorker({ store, sender: createEmailSender(process.env, demo) });
 const app = createApp({ store, demo });
 if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 app.listen(process.env.PORT || 4000, demo ? "127.0.0.1" : "0.0.0.0", () =>

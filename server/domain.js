@@ -1,4 +1,5 @@
 import {randomUUID,scryptSync,timingSafeEqual,randomBytes} from 'node:crypto';
+import {notifyBooking,notifyPaymentConfirmed} from './notifications.js';
 export const id=()=>randomUUID();
 export function fail(message,status=400){throw Object.assign(new Error(message),{status});}
 export const find=(rows,key)=>rows.find(r=>r.id===key)||fail('Record not found',404);
@@ -22,7 +23,7 @@ export function activate(s,paymentId){
   const m=find(s.memberships,p.membershipId);const now=new Date();
   const previous=s.memberships.filter(x=>x.id!==m.id&&x.memberId===m.memberId&&x.planId===m.planId&&statusOf(x)==='active'&&x.kind!=='sessions');
   const start=new Date(Math.max(now.getTime(),...previous.map(x=>new Date(x.endsAt).getTime())));
-  m.startsAt=start.toISOString();m.endsAt=new Date(start.getTime()+m.days*86400000).toISOString();m.status='active';p.status='paid';p.paidAt=now.toISOString();return p;
+  m.startsAt=start.toISOString();m.endsAt=new Date(start.getTime()+m.days*86400000).toISOString();m.status='active';p.status='paid';p.paidAt=now.toISOString();notifyPaymentConfirmed(s,p,m,now);return p;
 }
 export function book(s,memberId,classId){
   const c=find(s.schedule,classId);if(new Date(c.startsAt)<=new Date())fail('This session has already started.');
@@ -31,7 +32,7 @@ export function book(s,memberId,classId){
   if(active.length>=c.capacity)fail('This session is full.');
   const m=s.memberships.find(m=>m.memberId===memberId&&statusOf(m)==='active'&&m.classes&&m.credits>0&&new Date(m.startsAt)<=new Date(c.startsAt)&&new Date(m.endsAt)>new Date(c.startsAt));
   if(!m)fail('An eligible membership with available class credits is required.');
-  m.credits--;const b={id:id(),classId,memberId,membershipId:m.id,status:'booked',createdAt:new Date().toISOString()};s.bookings.push(b);return b;
+  m.credits--;const b={id:id(),classId,memberId,membershipId:m.id,status:'booked',createdAt:new Date().toISOString()};s.bookings.push(b);notifyBooking(s,b);return b;
 }
-export function cancelBooking(s,bookingId){const b=find(s.bookings,bookingId);if(b.status!=='booked')fail('Only an upcoming booking can be cancelled.');const c=find(s.schedule,b.classId);if(new Date(c.startsAt)<=new Date())fail('This session has already started.');const early=new Date(c.startsAt)-Date.now()>=s.settings.cancellationHours*3600000;if(early)find(s.memberships,b.membershipId).credits++;b.status='cancelled';b.creditReturned=early;return b;}
+export function cancelBooking(s,bookingId){const b=find(s.bookings,bookingId);if(b.status!=='booked')fail('Only an upcoming booking can be cancelled.');const c=find(s.schedule,b.classId);if(new Date(c.startsAt)<=new Date())fail('This session has already started.');const early=new Date(c.startsAt)-Date.now()>=s.settings.cancellationHours*3600000;if(early)find(s.memberships,b.membershipId).credits++;b.status='cancelled';b.creditReturned=early;notifyBooking(s,b,true);return b;}
 export function checkIn(s,memberId){const m=s.memberships.find(m=>m.memberId===memberId&&statusOf(m)==='active'&&m.gymAccess&&new Date(m.startsAt)<=new Date());if(!m)fail('This member has no active gym access.');const today=new Intl.DateTimeFormat('en-CA',{timeZone:s.settings.timezone}).format(new Date());if(s.attendance.some(a=>a.memberId===memberId&&new Intl.DateTimeFormat('en-CA',{timeZone:s.settings.timezone}).format(new Date(a.createdAt))===today))fail('This member is already checked in today.');const a={id:id(),memberId,createdAt:new Date().toISOString()};s.attendance.unshift(a);return a;}

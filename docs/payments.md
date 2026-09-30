@@ -62,6 +62,8 @@ Store that endpoint's signing secret in the host's secrets vault as STRIPE_WEBHO
 
 ## Verification
 
-`npm run test` covers the payment state machine, real SDK signature verification with synthetic events, authorization, retries, concurrency and provider failure handling through an injected Stripe test double. These automated tests do not contact Stripe. External sandbox verification is recorded separately in the task handoff.
+`npm run test` covers the payment state machine, real SDK signature verification with synthetic events, authorization, retries, concurrency and provider failure handling through an injected Stripe test double. These automated tests do not contact Stripe.
+
+The project owner reported a successful payment test after the integration was configured. This confirms the owner's manual test; it does not claim that every payment method or failure scenario was exercised against Stripe. Automated failure-path coverage remains separate from that manual result.
 
 Implementation follows [Checkout fulfillment](https://docs.stripe.com/checkout/fulfillment), [idempotent requests](https://docs.stripe.com/api/idempotent_requests), and [Stripe CLI webhook forwarding](https://docs.stripe.com/cli/listen).
