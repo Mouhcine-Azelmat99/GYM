@@ -1,3 +1,6 @@
+import {auditContext} from './audit.js';
+import {issueInvitation,acceptInvitation} from './invitations.js';
+import {report} from './reports.js';
 import {updateProfile,normalizePhoto} from './profile.js';
 import express from "express";
 import session from "express-session";
@@ -51,6 +54,8 @@ const planSchema = z
 const staffRoles = ["owner", "receptionist"];
 export function createApp({ store, demo = true, sessionStore, stripeClient, paymentConfig } = {}) {
   const app = express();
+  const invitationSecret=process.env.SESSION_SECRET || "local-demo-only-not-for-production";
+  app.use((req,res,next)=>auditContext.run({actor:()=>req.user||{id:"public",name:req.path==="/api/webhooks/stripe"?"Stripe":"Public visitor",role:req.path==="/api/webhooks/stripe"?"system":"guest"}},next));
   const appUrl = process.env.APP_URL || "http://127.0.0.1:5173";
   const origins = allowedOrigins(appUrl);
   const emailConfig = emailConfiguration(process.env, demo);
@@ -204,6 +209,11 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
     await loginSession(req, user);
     res.status(201).json({ ok: true });
   });
+  app.post('/api/auth/invitation', authLimit, async (req,res)=>{
+    const input=z.object({token:z.string().regex(/^[a-f0-9]{64}$/),password:z.string().min(10).max(128)}).parse(req.body);
+    const user=await store.mutate(s=>acceptInvitation(s,input.token,input.password));
+    await loginSession(req,user);res.json({ok:true});
+  });
   app.post("/api/auth/logout", (req, res) =>
     req.session.destroy(() => {
       res.clearCookie("forma.sid");
@@ -223,6 +233,20 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
         fail("You do not have access to this action.", 403);
       next();
     };
+  app.get('/api/reports',roles('owner'),async(req,res)=>res.json(report(await store.read(),String(req.query.from||''),String(req.query.to||''))));
+  app.get('/api/audit',roles('owner'),async(req,res)=>{
+    const {page,search}=z.object({page:z.coerce.number().int().min(1).max(10000).default(1),search:z.string().max(120).default('')}).parse(req.query);
+    const rows=[...((await store.read()).auditLogs||[])].reverse().filter(row=>[row.actorName,row.entity,row.action,row.recordId,...row.fields].join(' ').toLowerCase().includes(search.toLowerCase()));
+    res.json({rows:rows.slice((page-1)*50,page*50),total:rows.length,page});
+  });
+  app.post('/api/members/:id/invitation',roles(...staffRoles),authLimit,async(req,res)=>{
+    if(!demo&&!emailConfig.enabled)fail(emailConfig.reason,503);
+    const result=await store.mutate(s=>issueInvitation(s,req.params.id,invitationSecret));
+    res.json({expiresAt:result.expiresAt,...(demo?{demoUrl:appUrl.split('#')[0]+'#invite='+result.token}:{})});
+  });
+  app.post('/api/members/:id/invitation/revoke',roles(...staffRoles),async(req,res)=>{
+    await store.mutate(s=>{find(s.members,req.params.id);const invitation=(s.invitations||[]).find(i=>i.memberId===req.params.id&&i.status==='pending');if(!invitation)fail('No pending invitation.');invitation.status='revoked';});res.json({ok:true});
+  });
   app.patch('/api/profile', roles('member'), authLimit, async (req,res)=>{
     res.json(await store.mutate(s=>updateProfile(s,req.user.id,req.body)));
   });
@@ -235,6 +259,13 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
     const s = await store.read();
     delete s._id;
     delete s.__v;
+    const invitationRows=s.invitations||[];
+    delete s.invitations;delete s.auditLogs;
+    if(staffRoles.includes(req.user.role))s.members=s.members.map(m=>{
+      const invitation=invitationRows.find(i=>i.memberId===m.id);
+      const notification=(s.notifications||[]).find(n=>n.type==='member-invitation'&&n.referenceId===invitation?.id);
+      return {...m,portalStatus:s.users.some(u=>u.memberId===m.id)?'active':invitation?.status==='pending'?(new Date(invitation.expiresAt)>new Date()?'invited':'expired'):invitation?.status==='revoked'?'revoked':'not invited',invitationExpiresAt:invitation?.expiresAt,invitationEmailStatus:notification?.email.status};
+    });
     const user = { ...req.user };
     delete user.passwordHash;
     s.notifications = notificationsFor(s, user);
@@ -374,6 +405,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
           const p = find(s.payments, req.params.id);
           if (p.method !== "cash")
             fail("Online payments must be confirmed by the payment provider.");
+          if(p.status==="paid")return p;
           p.confirmedBy = req.user.id;
           return activate(s, p.id);
         }),

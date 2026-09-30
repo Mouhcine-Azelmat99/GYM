@@ -54,7 +54,7 @@ Tests exercise allowed origins, authentication/session persistence, role boundar
 
 ## Current release boundaries
 
-This is a functional starting release, not the entire product roadmap. Membership freezes/cancellation workflows, refunds, password recovery, email verification, staff-created member portal invitations, translations, tax invoices, advanced reports and a full public marketing website remain to be built. Prices use integer minor units and currently support USD, EUR, GBP, MAD, CAD and AUD. Currency is locked after payment records exist. Only one gym timezone and currency are configured at a time. Training session eligibility currently uses generic class credits.
+This is a functional starting release, not the entire product roadmap. Membership freezes/cancellation workflows, refunds, password recovery, email verification, translations, tax invoices, advanced forecasting and a full public marketing website remain to be built. Prices use integer minor units and currently support USD, EUR, GBP, MAD, CAD and AUD. Currency is locked after payment records exist. Only one gym timezone and currency are configured at a time. Training session eligibility currently uses generic class credits.
 
 The initial MongoDB adapter stores the gym as one atomic aggregate with optimistic concurrency, suitable only for a small evaluation dataset. Split growing histories into indexed collections and paginate the state API before operational use; the MongoDB document limit makes unlimited history unsuitable for this adapter. The project owner has reported a successful online payment test; see [payment verification](docs/payments.md#verification) for the distinction between manual and automated coverage.
 
@@ -63,3 +63,7 @@ The initial MongoDB adapter stores the gym as one atomic aggregate with optimist
 Booking confirmations, cancellations, and membership expiry reminders now appear in the member inbox, with Brevo SMTP delivery, email preferences, and staff delivery activity. See [Brevo setup and scheduling](docs/notifications.md). Run `npm run email:check` after configuring SMTP credentials to verify authentication without sending email.
 
 Members can edit their name and phone in **My profile**. Changing the login email requires the current password and an unused address. Profile photos support still JPEG, PNG, and WebP up to 2 MB and 16 megapixels. The server removes metadata and saves a 256-pixel square JPEG capped at 64 KB. Photos are stored with the member in the existing gym aggregate, so its documented document-size limitation still applies; larger deployments should move images to object storage. Photo and details saves are separate operations; the UI reports partial failures.
+
+## Staff operations
+
+Owners and receptionists can invite existing members through **Invitations**, resend expired links, or revoke access links. Owners also have **Reports** for revenue and retention and **Audit log** for recorded changes. See [operation definitions and setup](docs/operations.md).

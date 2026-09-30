@@ -98,6 +98,7 @@ export function shouldEmail(state, notification, now = new Date()) {
   const member = state.members.find(m => m.id === notification.memberId);
   if (!member?.email) return false;
   const preferences = { ...defaultPreferences, ...member.notificationPreferences };
+  if(notification.type==='member-invitation')return (state.invitations||[]).some(i=>i.id===notification.referenceId&&i.memberId===member.id&&i.email===member.email&&i.status==='pending'&&new Date(i.expiresAt)>now)&&!state.users.some(u=>u.memberId===member.id||u.email===member.email);
   if (notification.type === 'account-created') return notification.referenceId === member.id;
   if (notification.type === 'payment-completed') return state.payments.some(p => p.id === notification.referenceId && p.memberId === member.id && p.status === 'paid');
   if (notification.type === 'membership-confirmed') return state.memberships.some(m => m.id === notification.referenceId && m.memberId === member.id && m.status === 'active');

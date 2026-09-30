@@ -1,3 +1,4 @@
+import {invitationToken} from './invitations.js';
 import nodemailer from "nodemailer";
 import { z } from "zod";
 
@@ -29,7 +30,7 @@ const escape = (value) =>
       ],
   );
 
-export function emailContent({ notification, member, settings, appUrl }) {
+export function emailContent({ notification, member, settings, appUrl, invitationSecret }) {
   const url = new URL(appUrl);
   if (!["https:", "http:"].includes(url.protocol))
     throw new Error("Invalid application URL");
@@ -37,7 +38,11 @@ export function emailContent({ notification, member, settings, appUrl }) {
   const target = Object.hasOwn(targets, notification.target) ? notification.target : "memberships";
   url.hash = target;
   const name = member.name.split(" ")[0];
-  const label = targets[target];
+  let label = targets[target];
+  if(notification.type==='member-invitation'){
+    if(!invitationSecret)throw new Error('Invitation signing secret is required');
+    url.search='';url.hash='invite='+invitationToken(notification.referenceId,invitationSecret);label='Set your password';
+  }
   return {
     subject: notification.title,
     text: `${settings.name}\n\nHi ${name},\n\n${notification.body}\n\n${label}: ${url.href}\n\nManage your email preferences on your profile page.`,
@@ -69,6 +74,7 @@ export function createEmailSender(env = process.env, demo = false) {
         notification,
         member,
         settings,
+        invitationSecret: env.SESSION_SECRET,
         appUrl: env.APP_URL || "http://127.0.0.1:5173",
       });
       const result = await transport.sendMail({
