@@ -7,3 +7,6 @@ output/
 test-results/
 playwright-report/
 .env.example
+.playwright-cli
+docs
+tests
