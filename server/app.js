@@ -602,7 +602,7 @@ export function createApp({ store, demo = true, sessionStore, stripeClient, paym
     if (err instanceof z.ZodError)
       return res
         .status(400)
-        .json({ message: err.issues.map((i) => i.message).join(" ") });
+        .json({ message: err.issues.map((i) => i.message).join(" "), code:'VALIDATION_ERROR' });
     if (err.type?.startsWith('Stripe')) {
       // Provider errors can contain request parameters or personal data.
       console.error('Stripe request failed', { type: err.type, code: err.code, requestId: err.requestId });

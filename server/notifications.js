@@ -4,12 +4,13 @@ import { randomUUID } from 'node:crypto';
 export const defaultPreferences = { bookingEmails: true, expiryEmails: true };
 const terminalEmailStates = new Set(['sent', 'failed', 'skipped', 'not-configured']);
 
-export function addNotification(state, { key, memberId, type, title, body, target, referenceId, expiresAt }, now = new Date()) {
+export function addNotification(state, { key, memberId, type, title, body, target, referenceId, expiresAt, translation }, now = new Date()) {
   state.notifications ??= [];
   const existing = state.notifications.find(n => n.key === key);
   if (existing) return existing;
   const notification = {
     id: randomUUID(), key, memberId, type, title, body, target, referenceId,
+    ...(translation ? {translation} : {}),
     expiresAt: expiresAt || null, createdAt: now.toISOString(), readAt: null,
     email: { status: 'queued', attempts: 0, nextAttemptAt: now.toISOString() },
   };
@@ -21,6 +22,7 @@ export function notifyMemberCreated(state, member, portalAccount = true, now = n
   return addNotification(state, {key: `account:${member.id}`, memberId: member.id,
     type: 'account-created', title: 'Welcome to ' + state.settings.name,
     body: portalAccount ? 'Your member account is ready. You can explore memberships and book eligible classes.' : 'Your member record has been created. Contact reception to arrange access to the member portal.',
+    translation:{title:'Welcome to {{gym}}',body:portalAccount?'Your member account is ready. You can explore memberships and book eligible classes.':'Your member record has been created. Contact reception to arrange access to the member portal.',values:{gym:state.settings.name}},
     target: 'profile', referenceId: member.id}, now);
 }
 
@@ -28,10 +30,12 @@ export function notifyPaymentConfirmed(state, payment, membership, now = new Dat
   const amount = new Intl.NumberFormat('en', {style:'currency', currency:payment.currency}).format(payment.amount / 100);
   addNotification(state, {key:`payment:${payment.id}:paid`, memberId:payment.memberId,
     type:'payment-completed', title:'Payment received', body:`We received ${amount} for ${payment.description} by ${payment.method === 'cash' ? 'cash' : 'online payment'}.`,
+    translation:{title:'Payment received',body:'We received {{amount}} for {{plan}} by {{method}}.',values:{amount:{amount:payment.amount,currency:payment.currency},plan:payment.description,method:{label:payment.method}}},
     target:'payments', referenceId:payment.id}, now);
   const date = value => new Intl.DateTimeFormat('en', {dateStyle:'long', timeZone:state.settings.timezone}).format(new Date(value));
   addNotification(state, {key:`membership:${membership.id}:confirmed`, memberId:membership.memberId,
     type:'membership-confirmed', title:'Your membership is confirmed', body:`${membership.planName} is confirmed, from ${date(membership.startsAt)} to ${date(membership.endsAt)}.`,
+    translation:{title:'Your membership is confirmed',body:'{{plan}} is confirmed, from {{start}} to {{end}}.',values:{plan:membership.planName,start:{date:membership.startsAt,timeZone:state.settings.timezone},end:{date:membership.endsAt,timeZone:state.settings.timezone}}},
     target:'memberships', referenceId:membership.id}, now);
 }
 
@@ -46,6 +50,7 @@ export function notifyBooking(state, booking, cancelled = false, now = new Date(
     memberId: booking.memberId,
     type: cancelled ? 'booking-cancelled' : 'booking-confirmed',
     title: cancelled ? 'Your booking was cancelled' : 'Your booking is confirmed',
+    translation:{title:cancelled?'Your booking was cancelled':'Your booking is confirmed',body:cancelled?'{{session}} on {{when}} ({{timezone}}). {{credit}}':'{{session}} on {{when}} ({{timezone}}), {{room}}. Your place is reserved.',values:{session:session.title,when:{date:session.startsAt,timeZone:state.settings.timezone,withTime:true},timezone:state.settings.timezone,room:session.room,credit:{label:booking.creditReturned?'Your session credit was returned.':'The cancellation deadline has passed, so your credit was used.'}}},
     body: cancelled
       ? `${session.title} on ${when} (${state.settings.timezone}). ${booking.creditReturned ? 'Your session credit was returned.' : 'The cancellation deadline has passed, so your credit was used.'}`
       : `${session.title} on ${when} (${state.settings.timezone}), ${session.room}. Your place is reserved.`,
@@ -86,6 +91,7 @@ export function createExpiryReminders(state, now = new Date()) {
       key: `expiry:${membership.id}:${key}`, memberId: membership.memberId,
       type: 'membership-expiring', title: days === 0 ? 'Your membership expires today' : `Your membership expires in ${days} ${days === 1 ? 'day' : 'days'}`,
       body: `${membership.planName} expires on ${when}. Renew your membership to keep your access.`,
+      translation:{title:days===0?'Your membership expires today':'Your membership expires in {{days}}',body:'{{plan}} expires on {{date}}. Renew your membership to keep your access.',values:{plan:membership.planName,date:{date:membership.endsAt,timeZone:state.settings.timezone},days:{count:days,unit:'days'}}},
       target: 'memberships', referenceId: membership.id, expiresAt: membership.endsAt,
     }, now);
     membership.sentReminderThresholds ??= [];

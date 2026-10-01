@@ -67,3 +67,5 @@ Members can edit their name and phone in **My profile**. Changing the login emai
 ## Staff operations
 
 Owners and receptionists can invite existing members through **Invitations**, resend expired links, or revoke access links. Owners also have **Reports** for revenue and retention and **Audit log** for recorded changes. See [operation definitions and setup](docs/operations.md).
+
+English and Arabic interface, including RTL layouts: see [internationalization notes](docs/i18n.md).
